@@ -59,8 +59,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    expose:
-      - "5678"
+    ports:
+      # VPS localhost only; public access via SSH tunnel from your Mac
+      - "127.0.0.1:5678:5678"
 
   postgres:
     image: postgres:16-alpine
