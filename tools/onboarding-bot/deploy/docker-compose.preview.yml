@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: botc-pg
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: n8n_preview
+      POSTGRES_DB: n8n
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:2.17.2
+    container_name: n8n-preview
+    ports:
+      - "5678:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: n8n_preview
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_SECURE_COOKIE: "false"
+      N8N_RESTRICT_FILE_ACCESS_TO: "/knowledge:/home/node/.n8n-files"
+      NODE_FUNCTION_ALLOW_BUILTIN: "fs,path"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ../../../knowledge:/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  n8n_data:

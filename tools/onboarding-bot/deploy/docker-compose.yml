@@ -1,0 +1,83 @@
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    container_name: botc-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: botc-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      N8N_CHAT_WEBHOOK_URL: http://n8n:5678/webhook/potcc-chat-stream/chat
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: n8n
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      VALID_INVITE_CODES: ${VALID_INVITE_CODES}
+    depends_on:
+      - n8n
+      - postgres
+    expose:
+      - "3000"
+
+  n8n:
+    image: n8nio/n8n:2.17.2
+    container_name: botc-n8n
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${PG_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_RESTRICT_FILE_ACCESS_TO: /knowledge:/home/node/.n8n-files
+      NODE_FUNCTION_ALLOW_BUILTIN: "fs,path"
+      # Editor at subdomain only (optional — comment out to keep n8n internal-only)
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-}
+      WEBHOOK_URL: ${N8N_EDITOR_BASE_URL:-http://n8n:5678/}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ../../../knowledge:/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "5678"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: botc-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: n8n
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  caddy_data:
+  caddy_config:
+  n8n_data:
+  pg_data:

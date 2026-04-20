@@ -1,0 +1,22 @@
+# {$DOMAIN} — public URL users hit (e.g. botc.example.com)
+# HTTPS is auto-provisioned via Let's Encrypt
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Stream buffers kept small to preserve SSE/NDJSON live delivery
+    reverse_proxy web:3000 {
+        flush_interval -1
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+# Optional: n8n editor at n8n.{$DOMAIN}
+# Uncomment + set N8N_EDITOR_BASE_URL in .env if you want to access the editor remotely.
+# {$N8N_DOMAIN} {
+#     basic_auth {
+#         admin {$N8N_ADMIN_HASH}
+#     }
+#     reverse_proxy n8n:5678
+# }

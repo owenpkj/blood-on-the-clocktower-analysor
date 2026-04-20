@@ -87,7 +87,6 @@ tools/<tool-name>/
 | `knowledge/core_rules.md` | 游戏核心规则（事实来源） |
 | `knowledge/plays/` | 剧本集合 |
 | `tools/game-analyzer/` | 对局分析 Web 工具 |
-| `.claude/commands/botc-analyze.md` | 对话式分析 slash command |
 | `.claude/skills/` | 通用研发 Skills |
 | `README.md` | 项目总览与工具清单 |
 

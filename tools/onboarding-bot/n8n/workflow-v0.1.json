@@ -1,0 +1,410 @@
+{
+  "id": "potccchatv01000000",
+  "name": "POTCC Chat v0.1",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "11111111-0001-0000-0000-000000000000",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 400],
+      "parameters": {
+        "public": false,
+        "mode": "webhook",
+        "options": {
+          "responseMode": "streaming"
+        }
+      },
+      "webhookId": "potcc-chat-v01"
+    },
+    {
+      "id": "22222222-0001-0000-0000-000000000000",
+      "name": "IF - Is Init",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [460, 400],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-init",
+              "leftValue": "={{ $json.chatInput }}",
+              "rightValue": "__INIT__",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "33333333-0001-0000-0000-000000000000",
+      "name": "AI Agent - Opening",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [760, 200],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Chat Trigger').first().json.chatInput }}",
+        "options": {
+          "systemMessage": "你是血染钟楼（Blood on the Clocktower）助手 POTCC（波特克）。\n\n当前用户昵称是 {{ $('Chat Trigger').first().json.nickname }}。\n\n现在是他首次进入对话。请用一到两句自然、不重复模板的中文问候语，向他介绍你自己：\n- 你叫 波特克 (POTCC)\n- 你可以帮他了解血染钟楼的基础规则\n- 你可以解释不同角色的技能含义\n- 你可以给出这个角色的基本玩法建议\n\n用亲切但不啰嗦的语气。直接输出问候语，不要任何前后缀。"
+        }
+      }
+    },
+    {
+      "id": "33333333-0002-0000-0000-000000000000",
+      "name": "DeepSeek - Opening",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [680, 400],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "deepseek-chat",
+          "mode": "list"
+        },
+        "options": {
+          "baseURL": "https://api.deepseek.com",
+          "temperature": 0.9
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "DEEPSEEK_CREDENTIAL_ID",
+          "name": "DeepSeek"
+        }
+      }
+    },
+    {
+      "id": "33333333-0003-0000-0000-000000000000",
+      "name": "Memory - Opening",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [840, 420],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Chat Trigger').first().json.sessionId }}",
+        "contextWindowLength": 20,
+        "tableName": "n8n_chat_histories"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - botc-pg"
+        }
+      }
+    },
+    {
+      "id": "44444444-0001-0000-0000-000000000000",
+      "name": "Classify Intent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [760, 600],
+      "parameters": {
+        "promptType": "define",
+        "text": "=用户消息：{{ $('Chat Trigger').first().json.chatInput }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "system",
+              "message": "你是一个意图分类器。根据用户的中文消息，输出以下四个意图之一，并以**严格的 JSON** 格式返回，不要输出任何其他内容：\n\n可选意图：\n- 了解基本规则：询问血染钟楼的整体玩法、阵营、胜负、流程、醉酒中毒等基础概念\n- 了解角色：询问某个具体角色的技能、玩法、作用（如占卜师、投毒者、诺达鲺等）\n- 其他：询问与血染钟楼规则或角色无关的问题\n- 结束对话：表达再见、结束、离开等意思\n\n输出格式（严格 JSON，不要 markdown 代码块）：\n{\"intent\": \"了解基本规则\" | \"了解角色\" | \"其他\" | \"结束对话\", \"role_name\": \"<如果是了解角色，填角色中文名；否则填 null>\"}"
+            }
+          ]
+        },
+        "hasOutputParser": false
+      }
+    },
+    {
+      "id": "44444444-0002-0000-0000-000000000000",
+      "name": "DeepSeek - Classify",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [680, 780],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "deepseek-chat",
+          "mode": "list"
+        },
+        "options": {
+          "baseURL": "https://api.deepseek.com",
+          "temperature": 0
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "DEEPSEEK_CREDENTIAL_ID",
+          "name": "DeepSeek"
+        }
+      }
+    },
+    {
+      "id": "55555555-0001-0000-0000-000000000000",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 600],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.text || $input.first().json.output || '';\nlet parsed;\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = match ? JSON.parse(match[0]) : { intent: '其他', role_name: null };\n} catch (e) {\n  parsed = { intent: '其他', role_name: null };\n}\nreturn [{ json: parsed }];"
+      }
+    },
+    {
+      "id": "66666666-0001-0000-0000-000000000000",
+      "name": "Switch - Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1280, 600],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "id": "c-rules", "leftValue": "={{ $json.intent }}", "rightValue": "了解基本规则", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "了解基本规则"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "id": "c-role", "leftValue": "={{ $json.intent }}", "rightValue": "了解角色", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "了解角色"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "id": "c-end", "leftValue": "={{ $json.intent }}", "rightValue": "结束对话", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "结束对话"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "其他"
+        }
+      }
+    },
+    {
+      "id": "77777777-0001-0000-0000-000000000000",
+      "name": "Read Core Rules",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1540, 380],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/knowledge/core_rules.md",
+        "options": {
+          "encoding": "utf8"
+        }
+      }
+    },
+    {
+      "id": "77777777-0002-0000-0000-000000000000",
+      "name": "AI Agent - Basic Rules",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [1800, 380],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Chat Trigger').first().json.chatInput }}",
+        "options": {
+          "systemMessage": "=你是血染钟楼助手 POTCC（波特克）。\n\n用户想了解血染钟楼的基础规则。根据下方的规则文档回答用户问题。\n\n要求：\n- 用中文回答\n- 简洁：目标 100 字左右，最多不超过 200 字\n- 只讲用户问的点，不要扩展\n- 如果用户的问题规则文档里没写，坦白说你不确定\n\n---\n规则文档：\n{{ $('Read Core Rules').first().binary.data.data ? Buffer.from($('Read Core Rules').first().binary.data.data, 'base64').toString('utf8') : $('Read Core Rules').first().json.data }}"
+        }
+      }
+    },
+    {
+      "id": "77777777-0003-0000-0000-000000000000",
+      "name": "DeepSeek - Rules",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [1720, 580],
+      "parameters": {
+        "model": { "__rl": true, "value": "deepseek-chat", "mode": "list" },
+        "options": {
+          "baseURL": "https://api.deepseek.com",
+          "temperature": 0.4
+        }
+      },
+      "credentials": {
+        "openAiApi": { "id": "DEEPSEEK_CREDENTIAL_ID", "name": "DeepSeek" }
+      }
+    },
+    {
+      "id": "77777777-0004-0000-0000-000000000000",
+      "name": "Memory - Rules",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [1880, 600],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Chat Trigger').first().json.sessionId }}",
+        "contextWindowLength": 20,
+        "tableName": "n8n_chat_histories"
+      },
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres - botc-pg" }
+      }
+    },
+    {
+      "id": "88888888-0001-0000-0000-000000000000",
+      "name": "Read All Plays",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 780],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst dir = '/knowledge/plays';\nconst files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));\nconst content = files.map(f => `### ${f.replace('.md','')}\\n\\n` + fs.readFileSync(path.join(dir, f), 'utf8')).join('\\n\\n---\\n\\n');\nreturn [{ json: { content, files } }];"
+      }
+    },
+    {
+      "id": "88888888-0002-0000-0000-000000000000",
+      "name": "AI Agent - Role Info",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [1800, 780],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Chat Trigger').first().json.chatInput }}",
+        "options": {
+          "systemMessage": "=你是血染钟楼助手 POTCC（波特克）。\n\n用户询问了某个角色（可能的角色名：{{ $('Parse Intent').first().json.role_name }}）。请根据下方的剧本资料回答：\n1. 这个角色的技能含义\n2. 这个角色怎么玩（基本建议）\n\n要求：\n- 用中文回答\n- 简洁：目标 100-150 字，最多 200 字\n- 如果资料里没有这个角色，说：\"非常抱歉，该角色能力还未被学习，暂时无法帮到你，请尝试其他问题。\"\n- 不要编造\n\n---\n剧本资料：\n{{ $('Read All Plays').first().json.content }}"
+        }
+      }
+    },
+    {
+      "id": "88888888-0003-0000-0000-000000000000",
+      "name": "DeepSeek - Role",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [1720, 980],
+      "parameters": {
+        "model": { "__rl": true, "value": "deepseek-chat", "mode": "list" },
+        "options": {
+          "baseURL": "https://api.deepseek.com",
+          "temperature": 0.4
+        }
+      },
+      "credentials": {
+        "openAiApi": { "id": "DEEPSEEK_CREDENTIAL_ID", "name": "DeepSeek" }
+      }
+    },
+    {
+      "id": "88888888-0004-0000-0000-000000000000",
+      "name": "Memory - Role",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [1880, 1000],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Chat Trigger').first().json.sessionId }}",
+        "contextWindowLength": 20,
+        "tableName": "n8n_chat_histories"
+      },
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres - botc-pg" }
+      }
+    },
+    {
+      "id": "99999999-0001-0000-0000-000000000000",
+      "name": "Respond - Other",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1540, 1200],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "非常抱歉，我只能回答与基础规则和角色信息相关的问题，其他问题暂时还不能回答，请尝试其他问题。",
+        "options": {}
+      }
+    },
+    {
+      "id": "99999999-0002-0000-0000-000000000000",
+      "name": "Respond - End",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1540, 1400],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "谢谢和你的对话，祝你在鸦木布拉夫玩得愉快！有需要随时回来。",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [[{ "node": "IF - Is Init", "type": "main", "index": 0 }]]
+    },
+    "IF - Is Init": {
+      "main": [
+        [{ "node": "AI Agent - Opening", "type": "main", "index": 0 }],
+        [{ "node": "Classify Intent", "type": "main", "index": 0 }]
+      ]
+    },
+    "DeepSeek - Opening": {
+      "ai_languageModel": [[{ "node": "AI Agent - Opening", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Memory - Opening": {
+      "ai_memory": [[{ "node": "AI Agent - Opening", "type": "ai_memory", "index": 0 }]]
+    },
+    "Classify Intent": {
+      "main": [[{ "node": "Parse Intent", "type": "main", "index": 0 }]]
+    },
+    "DeepSeek - Classify": {
+      "ai_languageModel": [[{ "node": "Classify Intent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Parse Intent": {
+      "main": [[{ "node": "Switch - Intent", "type": "main", "index": 0 }]]
+    },
+    "Switch - Intent": {
+      "main": [
+        [{ "node": "Read Core Rules", "type": "main", "index": 0 }],
+        [{ "node": "Read All Plays", "type": "main", "index": 0 }],
+        [{ "node": "Respond - End", "type": "main", "index": 0 }],
+        [{ "node": "Respond - Other", "type": "main", "index": 0 }]
+      ]
+    },
+    "Read Core Rules": {
+      "main": [[{ "node": "AI Agent - Basic Rules", "type": "main", "index": 0 }]]
+    },
+    "DeepSeek - Rules": {
+      "ai_languageModel": [[{ "node": "AI Agent - Basic Rules", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Memory - Rules": {
+      "ai_memory": [[{ "node": "AI Agent - Basic Rules", "type": "ai_memory", "index": 0 }]]
+    },
+    "Read All Plays": {
+      "main": [[{ "node": "AI Agent - Role Info", "type": "main", "index": 0 }]]
+    },
+    "DeepSeek - Role": {
+      "ai_languageModel": [[{ "node": "AI Agent - Role Info", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Memory - Role": {
+      "ai_memory": [[{ "node": "AI Agent - Role Info", "type": "ai_memory", "index": 0 }]]
+    }
+  }
+}

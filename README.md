@@ -20,8 +20,6 @@
 │       └── docs/           # BRD / Architecture / TaskPlan
 │
 └── .claude/                # Claude Code 工作空间
-    ├── commands/
-    │   └── botc-analyze.md # 对话式分析 slash command：/botc-analyze
     └── skills/             # 通用研发 skill（架构/需求/任务/代码评审/测试）
 ```
 
@@ -36,8 +34,7 @@
 | 工具 | 形态 | 说明 |
 |------|------|------|
 | `game-analyzer/` | Next.js Web App | 录入对局信息，双 Agent 生成 Top 3 世界模型 |
-
-另有一个全局 slash command `/botc-analyze`（位于 `.claude/commands/`），无需启动任何服务，直接在 Claude Code 对话中完成推理。
+| `onboarding-bot/` | Next.js + n8n 对话工具 | 新手助手"波特克"，教规则、讲角色 |
 
 ## 新增工具约定
 
