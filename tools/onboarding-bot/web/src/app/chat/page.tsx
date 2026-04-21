@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { SendHorizonal, LogOut } from "lucide-react";
 import {
   DEFAULT_PROFILE,
-  OFFICIAL_SCRIPTS,
   extractProfileUpdate,
   getProfile,
   setProfile,
@@ -239,19 +238,6 @@ export default function ChatPage() {
     router.replace("/");
   }
 
-  function updateScript(script: string | null) {
-    const next = setProfile({ script });
-    setProfileState(next);
-    showToast(script ? `已切换剧本：${script}` : "已清除剧本");
-  }
-
-  function updateRole(role: string) {
-    const trimmed = role.trim() || null;
-    const next = setProfile({ role: trimmed });
-    setProfileState(next);
-    showToast(trimmed ? `已记为角色：${trimmed}` : "已清除角色");
-  }
-
   if (!nickname) return null;
 
   const busy = sending || streaming;
@@ -261,56 +247,31 @@ export default function ChatPage() {
       <GothicBackground />
       <div className="relative z-10 flex flex-col h-dvh max-w-3xl w-full mx-auto">
         {/* Header */}
-        <header className="flex flex-col gap-2 px-4 py-3 border-b border-[#2a1c16] bg-[#0c0807]/80 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center border bg-[#0f0505] border-[#3a2520]">
-              <DemonAvatar size={34} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-[#ebdcbd] text-base tracking-wider font-[var(--font-heading)] truncate">
-                血染钟楼助手
-              </h1>
-              <p className="text-[#a38f72] text-xs truncate">
-                访客 · <span className="gothic-nickname">{nickname}</span>
-              </p>
-            </div>
-            <button
-              onClick={exit}
-              className="text-[#a38f72] hover:text-[#ebdcbd] p-2 -mr-2"
-              aria-label="退出"
-            >
-              <LogOut size={18} />
-            </button>
+        <header className="flex items-center gap-3 px-4 py-3 border-b border-[#2a1c16] bg-[#0c0807]/80 backdrop-blur">
+          <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center border bg-[#0f0505] border-[#3a2520]">
+            <DemonAvatar size={34} />
           </div>
-
-          {/* Profile row */}
-          <div className="flex items-center gap-2 text-xs text-[#a38f72]">
-            <label className="flex items-center gap-1">
-              剧本：
-              <select
-                value={profile.script ?? ""}
-                onChange={(e) => updateScript(e.target.value || null)}
-                className="bg-[#1e1612] border border-[#3a2520] rounded text-[#ebdcbd] px-1.5 py-0.5 outline-none"
-              >
-                <option value="">未指定</option>
-                {OFFICIAL_SCRIPTS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1">
-              角色：
-              <input
-                value={profile.role ?? ""}
-                onChange={(e) => updateRole(e.target.value)}
-                placeholder="未指定"
-                className="bg-[#1e1612] border border-[#3a2520] rounded text-[#ebdcbd] px-1.5 py-0.5 w-24 outline-none placeholder:text-[#a38f72]/50"
-                maxLength={8}
-              />
-            </label>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[#ebdcbd] text-base tracking-wider font-[var(--font-heading)] truncate">
+              血染钟楼助手
+            </h1>
+            <p className="text-[#a38f72] text-xs truncate">
+              访客 · <span className="gothic-nickname">{nickname}</span>
+              {profile.script && (
+                <span className="ml-2">· 剧本 {profile.script}</span>
+              )}
+              {profile.role && (
+                <span className="ml-2">· 角色 {profile.role}</span>
+              )}
+            </p>
           </div>
+          <button
+            onClick={exit}
+            className="text-[#a38f72] hover:text-[#ebdcbd] p-2 -mr-2"
+            aria-label="退出"
+          >
+            <LogOut size={18} />
+          </button>
         </header>
         <div className="ornament" />
 
