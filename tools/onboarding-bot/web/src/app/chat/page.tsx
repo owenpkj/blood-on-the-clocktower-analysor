@@ -20,13 +20,29 @@ import {
 
 type Msg = { role: "user" | "assistant"; content: string };
 
-function getSessionId() {
+const IDLE_LIMIT_MS = 30 * 60 * 1000; // 30 min idle → new session
+
+/** Get or create a session id. If the last activity was >30 min ago,
+ *  force a new session so long-lived context doesn't accumulate. */
+function getSessionId(): { id: string; staled: boolean } {
+  const last = Number(localStorage.getItem("botc-last-activity") ?? "0");
+  const idleTooLong = last > 0 && Date.now() - last > IDLE_LIMIT_MS;
+  if (idleTooLong) {
+    localStorage.removeItem("botc-onboarding-session");
+  }
   let id = localStorage.getItem("botc-onboarding-session");
+  let staled = false;
   if (!id) {
     id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     localStorage.setItem("botc-onboarding-session", id);
+    staled = idleTooLong;
   }
-  return id;
+  localStorage.setItem("botc-last-activity", String(Date.now()));
+  return { id, staled };
+}
+
+function bumpActivity() {
+  localStorage.setItem("botc-last-activity", String(Date.now()));
 }
 
 async function streamChat(
@@ -104,9 +120,12 @@ export default function ChatPage() {
     initTriggered.current = true;
 
     setNickname(nick);
-    const sid = getSessionId();
+    const { id: sid, staled } = getSessionId();
     setSessionId(sid);
     setProfileState(getProfile());
+    if (staled) {
+      showToast("距上次对话超过 30 分钟，已开启新会话");
+    }
 
     (async () => {
       try {
@@ -225,7 +244,9 @@ export default function ChatPage() {
     const content = text.trim();
     if (!content || sending || streaming) return;
     setInput("");
+    bumpActivity();
     await sendMessage(sessionId, nickname ?? "", profile, content, messages);
+    bumpActivity();
   }
 
   async function exit() {
@@ -236,6 +257,7 @@ export default function ChatPage() {
     localStorage.removeItem("botc-invite");
     localStorage.removeItem("botc-onboarding-session");
     localStorage.removeItem("botc-profile");
+    localStorage.removeItem("botc-last-activity");
     router.replace("/");
   }
 
