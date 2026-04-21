@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BgmToggle } from "@/components/BgmToggle";
 import { DemonAvatar } from "@/components/DemonAvatar";
 import { GothicBackground } from "@/components/GothicBackground";
 import { MessageBubble } from "@/components/chat/MessageBubble";
@@ -265,6 +266,7 @@ export default function ChatPage() {
               )}
             </p>
           </div>
+          <BgmToggle />
           <button
             onClick={exit}
             className="text-[#a38f72] hover:text-[#ebdcbd] p-2 -mr-2"
