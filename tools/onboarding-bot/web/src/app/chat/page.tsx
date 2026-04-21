@@ -2,12 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClockLogo } from "@/components/ClockLogo";
+import { DemonAvatar } from "@/components/DemonAvatar";
+import { GothicBackground } from "@/components/GothicBackground";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { SendHorizonal, LogOut } from "lucide-react";
+import {
+  DEFAULT_PROFILE,
+  OFFICIAL_SCRIPTS,
+  extractProfileUpdate,
+  getProfile,
+  setProfile,
+  type Profile,
+} from "@/lib/profile";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -70,13 +79,20 @@ export default function ChatPage() {
   const router = useRouter();
   const [nickname, setNickname] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
+  const [profile, setProfileState] = useState<Profile>(DEFAULT_PROFILE);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initTriggered = useRef(false);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2800);
+  }
 
   useEffect(() => {
     const nick = localStorage.getItem("botc-nickname");
@@ -84,14 +100,13 @@ export default function ChatPage() {
       router.replace("/");
       return;
     }
-    // Guard against React Strict Mode double-invocation wiping out
-    // the in-flight streaming state.
     if (initTriggered.current) return;
     initTriggered.current = true;
 
     setNickname(nick);
     const sid = getSessionId();
     setSessionId(sid);
+    setProfileState(getProfile());
 
     (async () => {
       try {
@@ -101,9 +116,15 @@ export default function ChatPage() {
 
         if (history.length === 0) {
           setLoadingHistory(false);
-          await sendMessage(sid, nick, "__INIT__", []);
+          await sendMessage(sid, nick, getProfile(), "__INIT__", []);
         } else {
-          setMessages(history);
+          // Strip any profile directives from stored assistant content on load
+          const cleaned = history.map((m) =>
+            m.role === "assistant"
+              ? { ...m, content: m.content.replace(/<!--\s*profile:\s*\{[\s\S]*?\}\s*-->/gi, "") }
+              : m,
+          );
+          setMessages(cleaned);
           setLoadingHistory(false);
         }
       } catch (err) {
@@ -123,21 +144,26 @@ export default function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, streaming]);
 
-  async function sendMessage(sid: string, nick: string, chatInput: string, prior: Msg[]) {
+  async function sendMessage(
+    sid: string,
+    nick: string,
+    prof: Profile,
+    chatInput: string,
+    prior: Msg[],
+  ) {
     setSending(true);
     setStreaming(false);
 
-    const userPlusPrior = chatInput === "__INIT__" ? prior : [...prior, { role: "user" as const, content: chatInput }];
+    const userPlusPrior =
+      chatInput === "__INIT__" ? prior : [...prior, { role: "user" as const, content: chatInput }];
     setMessages(userPlusPrior);
-
-    // Placeholder assistant message that will be filled by stream
     setMessages([...userPlusPrior, { role: "assistant", content: "" }]);
 
     try {
       let first = true;
       await streamChat(
         "/api/chat",
-        { sessionId: sid, chatInput, nickname: nick },
+        { sessionId: sid, chatInput, nickname: nick, profile: prof },
         (chunk) => {
           if (first) {
             setStreaming(true);
@@ -154,6 +180,29 @@ export default function ChatPage() {
           });
         },
       );
+
+      // Post-stream: extract and apply profile update directives
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last && last.role === "assistant") {
+          const update = extractProfileUpdate(last.content);
+          if (update) {
+            const newProfile = setProfile(update);
+            setProfileState(newProfile);
+            const parts: string[] = [];
+            if (update.script) parts.push(`剧本：${update.script}`);
+            if (update.role) parts.push(`角色：${update.role}`);
+            if (parts.length) showToast(`已记住 ${parts.join("，")}`);
+            // Strip directive from displayed content
+            next[next.length - 1] = {
+              ...last,
+              content: last.content.replace(/<!--\s*profile:\s*\{[\s\S]*?\}\s*-->/gi, "").trim(),
+            };
+          }
+        }
+        return next;
+      });
     } catch (err) {
       setMessages((prev) => {
         const next = [...prev];
@@ -176,7 +225,7 @@ export default function ChatPage() {
     const content = text.trim();
     if (!content || sending || streaming) return;
     setInput("");
-    await sendMessage(sessionId, nickname ?? "", content, messages);
+    await sendMessage(sessionId, nickname ?? "", profile, content, messages);
   }
 
   async function exit() {
@@ -186,7 +235,21 @@ export default function ChatPage() {
     localStorage.removeItem("botc-nickname");
     localStorage.removeItem("botc-invite");
     localStorage.removeItem("botc-onboarding-session");
+    localStorage.removeItem("botc-profile");
     router.replace("/");
+  }
+
+  function updateScript(script: string | null) {
+    const next = setProfile({ script });
+    setProfileState(next);
+    showToast(script ? `已切换剧本：${script}` : "已清除剧本");
+  }
+
+  function updateRole(role: string) {
+    const trimmed = role.trim() || null;
+    const next = setProfile({ role: trimmed });
+    setProfileState(next);
+    showToast(trimmed ? `已记为角色：${trimmed}` : "已清除角色");
   }
 
   if (!nickname) return null;
@@ -194,70 +257,115 @@ export default function ChatPage() {
   const busy = sending || streaming;
 
   return (
-    <div className="flex flex-col h-dvh max-w-3xl w-full mx-auto">
-      {/* Header */}
-      <header className="flex items-center gap-3 px-5 py-3.5 border-b border-[#2a1c16] bg-[#0c0807]/90 backdrop-blur">
-        <ClockLogo size={36} />
-        <div className="flex-1 min-w-0">
-          <h1 className="text-[#ebdcbd] text-base font-[var(--font-heading)] tracking-wider truncate">
-            血染钟楼助手
-          </h1>
-          <p className="text-[#a38f72] text-xs truncate">访客 · {nickname}</p>
-        </div>
-        <button
-          onClick={exit}
-          className="text-[#a38f72] hover:text-[#ebdcbd] p-2 -mr-2"
-          aria-label="退出"
-        >
-          <LogOut size={18} />
-        </button>
-      </header>
-      <div className="ornament" />
+    <>
+      <GothicBackground />
+      <div className="relative z-10 flex flex-col h-dvh max-w-3xl w-full mx-auto">
+        {/* Header */}
+        <header className="flex flex-col gap-2 px-4 py-3 border-b border-[#2a1c16] bg-[#0c0807]/80 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center border bg-[#0f0505] border-[#3a2520]">
+              <DemonAvatar size={34} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-[#ebdcbd] text-base tracking-wider font-[var(--font-heading)] truncate">
+                血染钟楼助手
+              </h1>
+              <p className="text-[#a38f72] text-xs truncate">
+                访客 · <span className="gothic-nickname">{nickname}</span>
+              </p>
+            </div>
+            <button
+              onClick={exit}
+              className="text-[#a38f72] hover:text-[#ebdcbd] p-2 -mr-2"
+              aria-label="退出"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
-        {loadingHistory && (
-          <div className="text-center text-[#a38f72] text-sm py-8">加载对话中…</div>
-        )}
-        {messages.map((m, i) => (
-          <MessageBubble key={i} role={m.role} content={m.content} />
-        ))}
-        {sending && !streaming && <TypingIndicator />}
+          {/* Profile row */}
+          <div className="flex items-center gap-2 text-xs text-[#a38f72]">
+            <label className="flex items-center gap-1">
+              剧本：
+              <select
+                value={profile.script ?? ""}
+                onChange={(e) => updateScript(e.target.value || null)}
+                className="bg-[#1e1612] border border-[#3a2520] rounded text-[#ebdcbd] px-1.5 py-0.5 outline-none"
+              >
+                <option value="">未指定</option>
+                {OFFICIAL_SCRIPTS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              角色：
+              <input
+                value={profile.role ?? ""}
+                onChange={(e) => updateRole(e.target.value)}
+                placeholder="未指定"
+                className="bg-[#1e1612] border border-[#3a2520] rounded text-[#ebdcbd] px-1.5 py-0.5 w-24 outline-none placeholder:text-[#a38f72]/50"
+                maxLength={8}
+              />
+            </label>
+          </div>
+        </header>
+        <div className="ornament" />
+
+        {/* Messages */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
+          {loadingHistory && (
+            <div className="text-center text-[#a38f72] text-sm py-8">加载对话中…</div>
+          )}
+          {messages.map((m, i) => (
+            <MessageBubble key={i} role={m.role} content={m.content} nickname={nickname} />
+          ))}
+          {sending && !streaming && <TypingIndicator />}
+        </div>
+
+        <div className="ornament" />
+
+        {/* Composer */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(input);
+          }}
+          className="flex items-end gap-2 p-3 bg-[#0c0807]/80 backdrop-blur"
+        >
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(input);
+              }
+            }}
+            placeholder="向助手发问……"
+            rows={1}
+            disabled={loadingHistory}
+            className="flex-1 resize-none bg-[#1e1612]/90 border-[#3a2520] text-[#ebdcbd] placeholder:text-[#a38f72]/60 min-h-[44px] max-h-36"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!input.trim() || busy || loadingHistory}
+            className="bg-[#8b0000] hover:bg-[#a42d2d] text-[#ebdcbd] h-11 w-11 shrink-0 border border-[#5e1c1c]"
+          >
+            <SendHorizonal size={18} />
+          </Button>
+        </form>
       </div>
 
-      <div className="ornament" />
-
-      {/* Composer */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-        className="flex items-end gap-2 p-3 bg-[#0c0807]"
-      >
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send(input);
-            }
-          }}
-          placeholder="向助手发问……"
-          rows={1}
-          disabled={loadingHistory}
-          className="flex-1 resize-none bg-[#1e1612] border-[#3a2520] text-[#ebdcbd] placeholder:text-[#a38f72]/60 min-h-[44px] max-h-36"
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!input.trim() || busy || loadingHistory}
-          className="bg-[#8b0000] hover:bg-[#a42d2d] text-[#ebdcbd] h-11 w-11 shrink-0 border border-[#5e1c1c]"
-        >
-          <SendHorizonal size={18} />
-        </Button>
-      </form>
-    </div>
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-20 px-4 py-2 bg-[#15100d] border border-[#5e1c1c] rounded-md text-[#ebdcbd] text-sm shadow-lg">
+          {toast}
+        </div>
+      )}
+    </>
   );
 }

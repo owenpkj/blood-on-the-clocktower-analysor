@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const { sessionId, chatInput, nickname } = await req.json();
+  const { sessionId, chatInput, nickname, profile } = await req.json();
 
   const url = process.env.N8N_CHAT_WEBHOOK_URL;
   if (!url) {
@@ -22,6 +22,7 @@ export async function POST(req: Request) {
         sessionId,
         chatInput,
         nickname,
+        profile: profile ?? { script: null, role: null },
       }),
     });
   } catch (err) {

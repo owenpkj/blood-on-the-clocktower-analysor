@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cinzel, Libre_Baskerville } from "next/font/google";
+import { Cinzel, Libre_Baskerville, UnifrakturCook } from "next/font/google";
 import "./globals.css";
 
 const heading = Cinzel({
@@ -16,6 +16,13 @@ const body = Libre_Baskerville({
   display: "swap",
 });
 
+const blackletter = UnifrakturCook({
+  subsets: ["latin"],
+  weight: ["700"],
+  variable: "--font-blackletter",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "血染钟楼助手",
   description: "带你了解血染钟楼的规则、角色与玩法。",
@@ -29,7 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`${heading.variable} ${body.variable} h-full antialiased`}
+      className={`${heading.variable} ${body.variable} ${blackletter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
