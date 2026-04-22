@@ -440,3 +440,79 @@ VALID_INVITE_CODES=BOTC2026,EARLY,FRIENDS
 | 1.0 | 2026-04-20 | 初版匹配 BRD v1.2 |
 | 1.1 | 2026-04-20 | 纳入 Caddy 保留说明、history 直连本地 pg（ADR-009）、Next.js standalone（ADR-007）、Hybrid tool-calling（ADR-008）、knowledge 挂载（ADR-010）、AI Agent Tools Design 章节 |
 | 1.2 | 2026-04-20 | v1 scope 收敛：ADR-008 简化为纯 markdown 注入（Supabase 依赖推迟）；Tools Design 章节改写为"知识注入（v1）" |
+| 1.3 | 2026-04-22 | 记录已部署的增量。新增 ADR-011~014。详细见下 |
+
+---
+
+## ADR-011：角色 / 剧本数据规范化
+
+- **状态**：采纳（2026-04-22 已部署）
+- **背景**：同一角色可能出现在多个剧本，早期把技能写进剧本 md 导致数据冗余
+- **决策**：
+  - `knowledge/roles/<角色>.md` — 每角色一文件（canonical 事实来源）
+  - `knowledge/plays/<剧本>.md` — 只存元数据 / 角色清单 / 夜晚顺序 / 本剧本特有规则
+  - `tools/onboarding-bot/scripts/migrate_roles.py` 一次性迁移脚本（可重跑）
+- **后果**：修改角色技能只改一处；官方三板共 72 个角色，0 冲突；剧本文件 170→60 行
+- **扩展性**：未来新增剧本只需新 play md + 挂 role 引用；角色复用零成本
+
+## ADR-012：RAG Fuzzy Role Lookup（替代全量注入）
+
+- **状态**：采纳（2026-04-22 已部署）
+- **背景**：全量把 70+ 角色 md 塞 system prompt 会 attention-dilute，且浪费 token
+- **决策**：
+  - `Classify Intent` 提取 `role_names` 数组
+  - `Fuzzy Role Lookup` Code 节点做三级匹配：完全 → 包含 → 反向包含
+  - 只把匹配到的 1-N 个角色 md 注入 `AI Agent - Role Info` 的 system prompt
+  - 多角色对比走同一路径（数组长度 > 1）
+- **后果**：typical prompt size 从 ~25k token 降到 ~500-2k；首 token 延迟降低 ~40%
+
+## ADR-013：User Profile 客户端化 + AI 指令驱动
+
+- **状态**：采纳（2026-04-22 已部署）
+- **背景**：profile (剧本、角色) 对推理重要，但每局都变，存 DB 过重
+- **决策**：
+  - **Profile 存 localStorage**（`botc-profile`），不落 DB
+  - 前端每次请求带 `profile` 字段，workflow 注入 system prompt（所有 Agent 可感知）
+  - **AI 通过 HTML 注释指令反控前端**：回答末尾追加 `<!--profile: {...}-->`，前端流式结束后解析 + 应用
+  - Profile 更新严格：仅当用户明说"我是 XX"/"我在玩 XX"，或明确肯定回答"这是你的角色吗"才触发
+  - 移除早期手动下拉选择 UI
+- **后果**：零 DB schema；换设备即丢；简洁无认证；用户无需手动操作
+
+## ADR-014：Agent 严格模式 + 玩法通用原则独立文档
+
+- **状态**：采纳（2026-04-22 已部署）
+- **背景**：AI 回答角色问题时过度推理（"A 是恶魔、B 善良..."），超出文档内容
+- **决策**：
+  - Role Info Agent system prompt 加严：只陈述文档直接写明内容；不推理/假设/列举可能性
+  - "玩法建议"独立为 `knowledge/playstyle_principles.md`（用户提供的抽象原则）
+  - 具体角色的微操建议留给说书人/社区，资料里不承诺
+  - Agent `text` 字段只含 `chatInput`，检索内容放 system prompt → 避免 Postgres Chat Memory 存入污染的提示模板
+
+## ADR-015：Session TTL（客户端闲置 + 服务端定时）
+
+- **状态**：采纳（2026-04-22 已部署）
+- **决策**：
+  - 前端：localStorage `botc-last-activity` 追踪；挂载时若 >30min 未活动，生成新 sessionId + toast 提示
+  - 服务端：Postgres `n8n_chat_histories` 加 `created_at timestamptz DEFAULT now()` 列
+  - cron：`/opt/botc-agent/tools/onboarding-bot/deploy/cron-cleanup.sh` 每天 03:00 跑 `DELETE WHERE created_at < NOW() - INTERVAL '30 days'`
+- **后果**：对话上下文不会无限膨胀；DB 磁盘自然收敛
+
+## ADR-016：前端哥特 UI + BGM
+
+- **状态**：采纳（2026-04-22 已部署）
+- **决策**：
+  - `GothicBackground.tsx` — 移动优先（1080×1920 viewBox），血月 + 钟楼 + 乌鸦
+  - `DemonAvatar.tsx` — 哥特恶魔头像（AI 气泡）
+  - 用户头像 = 昵称的 UnifrakturCook blackletter 字体，nickname maxLength=6
+  - `BgmToggle.tsx` — dark ambient BGM（pixabay: Everything is Dead），默认开，autoplay 被拦截时首次用户手势触发
+- **后果**：强视觉氛围；移动端竖屏友好；无版权风险（SVG 自绘，音乐 CC0）
+
+## 部署拓扑（当前）
+
+- VPS：阿里云香港轻量 2C2G / 50GB SSD，IP `47.76.145.16`
+- 域名：`potcc.com`（Namecheap 注册，A 记录 → VPS IP）
+- HTTPS：Caddy 自动 Let's Encrypt
+- 容器：`caddy / web / n8n / postgres`，docker-compose 管理
+- n8n 不公网暴露，仅 127.0.0.1:5678；管理通过 SSH tunnel (`ssh -L 5679:localhost:5678`)
+- 邀请码：`potcc2026`（.env 白名单）
+- 镜像部署：Mac 本地 `docker buildx --platform linux/amd64` → scp tar → VPS `docker load`（VPS 2G RAM 不够 build Next.js）
